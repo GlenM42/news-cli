@@ -20,13 +20,21 @@ import (
 	"github.com/charmbracelet/wish/activeterm"
 	"github.com/charmbracelet/wish/bubbletea"
 	"github.com/charmbracelet/wish/logging"
+	"github.com/joho/godotenv"
 	"github.com/muesli/termenv"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 const (
 	host = "localhost"
 	port = "23234"
 )
+
+// Map of allowed users and their public keys
+var users = map[string]string{
+	"admin": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINNUwpw1ul3ZEUgU+DYYO/eIdnOCoQP1trAJ0KMFH0KL ha@Hlibs-MacBook-Air.local",
+}
 
 // app contains a wish server and the list of running programs.
 type app struct {
@@ -48,11 +56,65 @@ func (a *app) send(msg tea.Msg) {
 	}
 }
 
+func loadEnv() {
+	// Load the .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
+}
+
 func newApp() *app {
 	a := new(app)
 	s, err := wish.NewServer(
 		wish.WithAddress(net.JoinHostPort(host, port)),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
+
+		// Public-Key Authentication
+		wish.WithPublicKeyAuth(func(_ ssh.Context, key ssh.PublicKey) bool {
+			log.Info("Attempting public-key authentication")
+			for _, pubkey := range users {
+				parsed, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(pubkey))
+				if ssh.KeysEqual(key, parsed) {
+					log.Info("Public-key authentication successful")
+					return true
+				}
+			}
+			log.Warn("Public-key authentication failed")
+			return false
+		}),
+
+		// Keyboard-Interactive Authentication
+		wish.WithKeyboardInteractiveAuth(
+			func(_ ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
+				log.Info("Attempting keyboard-interactive authentication")
+				answers, err := challenger(
+					"Authentication Challenge", "",
+					[]string{
+						"♦ Which editor is best (vim/emacs)? ",
+						"♦ What is the name of the author of this app? ",
+					},
+					[]bool{true, true}, // Both prompts require answers
+				)
+				if err != nil || len(answers) != 2 {
+					log.Warn("keyboard-interactive authentication failed")
+					return false
+				}
+
+				// Check for correctness
+				correctAnswers := map[int]string{
+					1: os.Getenv("QUESTION_1"),
+					2: os.Getenv("QUESTION_2"),
+				}
+				if answers[0] == correctAnswers[1] && answers[1] == correctAnswers[2] {
+					log.Info("Keyboard-interactive authentication successful")
+					return true
+				}
+				log.Warn("Keyboard-interactive authentication failed")
+				return false
+			},
+		),
+
 		wish.WithMiddleware(
 			bubbletea.MiddlewareWithProgramHandler(a.ProgramHandler, termenv.ANSI256),
 			activeterm.Middleware(),
@@ -63,7 +125,7 @@ func newApp() *app {
 		log.Error("Could not start server", "error", err)
 	}
 
-	a.Server = s
+	a.Server = s // Assign the server to the app wrapper
 	return a
 }
 
@@ -103,6 +165,9 @@ func (a *app) ProgramHandler(s ssh.Session) *tea.Program {
 }
 
 func main() {
+	// Load Env variables
+	loadEnv()
+
 	app := newApp()
 	app.Start()
 }
