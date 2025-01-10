@@ -1,3 +1,5 @@
 .env
 .venv
 .ssh
+/authorized_keys.json
+/newscli
