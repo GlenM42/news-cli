@@ -20,158 +20,79 @@ So far, two parts have been implemented separately.
   - Updates its own view based on the user actions.
 
 Therefore, the user message, once sent in the Bubble Tea program, is
-dispatched to the App Wrapper. App Wrapper broadcasts the message it recieved to all active
+dispatched to the App Wrapper. App Wrapper broadcasts the message it received to all active
 Bubble Tea programs.
 
-## Plan for deployment
+## Documentation for SSH Chat Application
 
-#### **Step 1: Build the Go Application**
+The application uses the following libraries:
+- **Bubble Tea**: To create the TUI.
+- **Wish**: To handle SSH sessions.
+- **Lipgloss**: For styling the TUI.
+- **Termenv**: For terminal manipulation.
 
-Compile the app into a static binary for Linux:
+### **File Structure**
 
-```bash
-GOOS=linux GOARCH=amd64 go build -o multichat
+```
+.
+├── main.go                // Entry point for the application
+├── server.go              // Contains the SSH server configuration and startup logic
+├── auth.go                // Handles user authentication logic
+├── model.go               // Contains TUI state, update logic, and rendering
+├── styles.go              // Styling definitions for the TUI
+├── authorized_keys.json   // External file storing user credentials (username and public keys)
+├── .env                   // Stores environment variables for keyboard-interactive authentication
+├── go.mod                 // Go module file
+└── go.sum                 // Dependency checksum file
 ```
 
-We’ll end up with an executable called `multichat`.
+### **Installation Instructions**
 
-#### **Step 2: Create a Dockerfile**
+1. **Pre-requisites**:
+    - Go (1.18+)
+    - SSH client (to connect to the server)
+    - `authorized_keys.json` (see below for format)
 
-Here’s a Dockerfile for your app:
+2. **Setting up Environment Variables**:
+   Create a `.env` file in the root directory:
+   ```
+   NEWS_API_KEY=...
+   SSH_HOST=...
+   SSH_PORT=...
+   QUESTION_1=...
+   QUESTION_2=...
+   ```
 
-```dockerfile
-# Use a minimal base image for Go apps
-FROM golang:1.20-alpine AS builder
+3. **Adding Authorized Users**:
+   Create a JSON file named `authorized_keys.json`:
+   ```json
+   {
+     "users": [
+       {
+         "username": "...",
+         "publicKey": "..."
+       },
+       {
+         "username": "...",
+         "publicKey": "..."
+       }
+     ]
+   }
+   ```
 
-# Set the working directory
-WORKDIR /app
+4. **Running the Application**:
+    - Fetch dependencies and build the application:
+      ```bash
+      go mod tidy
+      go build
+      ```
+    - Run the application:
+      ```bash
+      ./your-app-binary
+      ```
 
-# Copy the Go modules and source code
-COPY go.mod go.sum ./
-RUN go mod download
-
-COPY . .
-
-# Build the application
-RUN go build -o multichat
-
-# Use a lightweight image for running the app
-FROM alpine:latest
-
-WORKDIR /root/
-
-# Copy the built binary from the builder
-COPY --from=builder /app/multichat .
-
-# Copy the .env file (if required)
-COPY .env .
-
-# Expose the SSH port
-EXPOSE 23234
-
-# Run the application
-CMD ["./multichat"]
-```
-
-#### **Step 3: Build and Run the Docker Image**
-
-1. Build the Docker image:
-
+5. **Connecting via SSH**:
+   Use an SSH client to connect:
    ```bash
-   docker build -t multichat .
+   ssh -p 23234 <username>@localhost
    ```
-
-2. Run the container:
-
-   ```bash
-   docker run -d -p 23234:23234 --name multichat --env-file .env multichat
-   ```
-
-   - `-d`: Runs the container in detached mode.
-   - `-p 23234:23234`: Maps port `23234` on the host to the container.
-   - `--env-file .env`: Loads the `.env` file into the container.
-
-3. Verify it’s running:
-   ```bash
-   docker ps
-   ```
-
-#### **Step 4: Configure Public Access**
-
-For people across the globe to access the app, we need to:
-
-1. **Open the SSH port (23234) in your firewall**:
-
-   - If using `ufw`:
-     ```bash
-     sudo ufw allow 23234
-     ```
-   - For other firewalls, open TCP port 23234.
-
-2. **Point a Domain Name to the Server**:
-
-3. **Use a Public IP (if no domain)**:
-   - Share a public IP address:
-     ```bash
-     ssh -p 23234 user@<your-public-ip>
-     ```
-
-#### **Step 5: Use a Systemd Service for Reliability (Optional)**
-
-If you don’t want to use Docker, set up your app as a **systemd service** so it runs indefinitely.
-
-1. Create a systemd service file:
-
-   ```bash
-   sudo nano /etc/systemd/system/multichat.service
-   ```
-
-2. Add the following configuration:
-
-   ```ini
-   [Unit]
-   Description=MultiChat SSH Server
-   After=network.target
-
-   [Service]
-   User=<your-username>
-   ExecStart=/path/to/multichat
-   Restart=always
-   EnvironmentFile=/path/to/.env
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-3. Start and enable the service:
-   ```bash
-   sudo systemctl start multichat
-   sudo systemctl enable multichat
-   ```
-
-#### **6. Security Best Practices**
-
-1. **Use Strong SSH Keys**:
-
-   - Ensure all users generate **strong SSH keys** (e.g., ed25519).
-
-2. **Rate-Limit Connections**:
-
-   - Use tools like `fail2ban` to prevent brute-force attacks:
-     ```bash
-     sudo apt install fail2ban
-     ```
-
-3. **Enable Firewall**:
-
-   - Limit access to port `23234` to trusted IPs (if possible):
-     ```bash
-     sudo ufw allow from <trusted-ip> to any port 23234
-     ```
-
-4. **Run as a Non-Root User**:
-
-   - Avoid running the app as `root` in Docker or directly.
-
-5. **Use HTTPS for Sensitive Data**:
-   - If you plan to expand the app to include non-SSH interfaces (like a web frontend), ensure all communication is encrypted.
