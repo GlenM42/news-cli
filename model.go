@@ -242,6 +242,11 @@ func (m model) renderNewsList() string {
 
 // renderNewsDetail shows the description for the currently selected item.
 func (m model) renderNewsDetail() string {
+	// Check if newsList is empty or if the selectedIndex is out of bounds
+	if len(m.newsList) == 0 || m.selectedIndex < 0 || m.selectedIndex >= len(m.newsList) {
+		return "No news available to display."
+	}
+
 	news := m.newsList[m.selectedIndex]
 	title := fmt.Sprintf("Detail for: %s", news.Headline)
 	desc := wrapText(news.Description, 80) // Wrap description to 80 characters per line
