@@ -3,3 +3,8 @@
 .ssh
 /authorized_keys.json
 /newscli
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/news-cli.iml
+/.idea/vcs.xml

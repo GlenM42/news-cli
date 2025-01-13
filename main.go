@@ -29,6 +29,10 @@ func main() {
 		log.Fatalf("Could not load authorized keys: %v", err)
 	}
 
+	// Retrieve host and port from environment variables
+	host := getEnvOrDefault("SSH_HOST", "localhost")
+	port := getEnvOrDefault("SSH_PORT", "23234")
+
 	// Create a new app instance
 	app := newApp()
 
